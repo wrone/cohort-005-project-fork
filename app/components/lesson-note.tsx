@@ -61,10 +61,6 @@ export function LessonNote({ note }: { note: LessonNoteData }) {
               {status.length} / {MAX_NOTE_LENGTH}
             </span>
           </div>
-
-          <p className="text-xs text-muted-foreground">
-            Only you can see your notes.
-          </p>
         </fetcher.Form>
       </CardContent>
     </Card>
