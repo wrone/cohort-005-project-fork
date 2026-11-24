@@ -5,9 +5,8 @@ import {
   quizOptions,
   quizAttempts,
   quizAnswers,
-  QuestionType,
 } from "~/db/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 
 export function getQuizByLessonId(lessonId: number) {
   return db.select().from(quizzes).where(eq(quizzes.lessonId, lessonId)).get();
@@ -82,6 +81,10 @@ export function computeResult(
       .orderBy(quizQuestions.position)
       .all();
 
+    const correctOptionByQuestion = correctOptionsFor(
+      questions.map((q) => q.id)
+    );
+
     let correct = 0;
     const total = questions.length;
     const questionResults: QuestionResult[] = [];
@@ -100,29 +103,7 @@ export function computeResult(
         continue;
       }
 
-      let correctOptionId = null;
-      if (q.questionType === QuestionType.MultipleChoice) {
-        const opts = db
-          .select()
-          .from(quizOptions)
-          .where(eq(quizOptions.questionId, q.id))
-          .all();
-        const correctOpt = opts.find((o) => o.isCorrect === true);
-        correctOptionId = correctOpt ? correctOpt.id : null;
-      } else if (q.questionType === QuestionType.TrueFalse) {
-        const correctOpt = db
-          .select()
-          .from(quizOptions)
-          .where(
-            and(
-              eq(quizOptions.questionId, q.id),
-              eq(quizOptions.isCorrect, true)
-            )
-          )
-          .get();
-        correctOptionId = correctOpt ? correctOpt.id : null;
-      }
-
+      const correctOptionId = correctOptionByQuestion.get(q.id) ?? null;
       const isCorrect = selected === correctOptionId;
       if (isCorrect) correct++;
 
@@ -138,28 +119,35 @@ export function computeResult(
     const passed = scoreValue > 0.7;
     const grade = calculateGrade(scoreValue);
 
-    const attempt = db
-      .insert(quizAttempts)
-      .values({
-        userId,
-        quizId,
-        score: scoreValue,
-        passed,
-      })
-      .returning()
-      .get();
+    const answers = questionResults.flatMap((result) =>
+      result.selectedOptionId === null
+        ? []
+        : [
+            {
+              questionId: result.questionId,
+              selectedOptionId: result.selectedOptionId,
+            },
+          ]
+    );
 
-    for (const result of questionResults) {
-      if (result.selectedOptionId !== null) {
-        db.insert(quizAnswers)
-          .values({
-            attemptId: attempt.id,
-            questionId: result.questionId,
-            selectedOptionId: result.selectedOptionId,
-          })
+    const attempt = db.transaction((tx) => {
+      const row = tx
+        .insert(quizAttempts)
+        .values({
+          userId,
+          quizId,
+          score: scoreValue,
+          passed,
+        })
+        .returning()
+        .get();
+      if (answers.length > 0) {
+        tx.insert(quizAnswers)
+          .values(answers.map((a) => ({ ...a, attemptId: row.id })))
           .run();
       }
-    }
+      return row;
+    });
 
     return {
       attemptId: attempt.id,
@@ -174,6 +162,24 @@ export function computeResult(
     console.error(error);
     return null;
   }
+}
+
+/** The option marked correct for each question, in one query. */
+function correctOptionsFor(questionIds: number[]) {
+  const rows = db
+    .select({ id: quizOptions.id, questionId: quizOptions.questionId })
+    .from(quizOptions)
+    .where(
+      and(
+        inArray(quizOptions.questionId, questionIds),
+        eq(quizOptions.isCorrect, true)
+      )
+    )
+    // Newest first, so that if a question has two correct options the Map
+    // keeps the oldest, as scoring did before it was one query.
+    .orderBy(desc(quizOptions.id))
+    .all();
+  return new Map(rows.map((row) => [row.questionId, row.id]));
 }
 
 export function getQuizById(quizId: number) {
