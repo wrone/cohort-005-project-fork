@@ -129,8 +129,10 @@ export function FullLesson({ data }: { data: FullLessonPage }) {
             />
           )}
 
-          {/* Note — under the video, so the Student can write while they watch */}
-          {currentUserId && <LessonNote note={note} />}
+          {/* Note — under the video, so the Student can write while they watch.
+              Keyed by lesson: the draft is local state, and without a remount
+              one lesson's text would follow the Student to the next lesson. */}
+          {currentUserId && <LessonNote key={lesson.id} note={note} />}
 
           {/* Lesson Content */}
           {contentHtml && (
