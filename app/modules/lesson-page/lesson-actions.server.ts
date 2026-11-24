@@ -12,8 +12,8 @@ export function findQuiz(quizId: number) {
   return getQuizById(quizId);
 }
 
-export function completeLesson(userId: number, lessonId: number) {
-  return markLessonComplete(userId, lessonId);
+export function completeLesson(userId: number, lessonId: number, now: Date) {
+  return markLessonComplete(userId, lessonId, now);
 }
 
 /**

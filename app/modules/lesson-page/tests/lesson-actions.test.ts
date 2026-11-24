@@ -164,15 +164,16 @@ describe("findQuiz", () => {
 
 describe("completeLesson", () => {
   it("completes a lesson the Student has not opened", () => {
-    const progress = completeLesson(seeded.user.id, seeded.lessons[2].id);
+    const now = new Date("2026-03-01T12:00:00.000Z");
+    const progress = completeLesson(seeded.user.id, seeded.lessons[2].id, now);
     expect(progress.status).toBe(LessonProgressStatus.Completed);
-    expect(progress.completedAt).not.toBeNull();
+    expect(progress.completedAt).toBe(now.toISOString());
   });
 
   it("completes a lesson already in progress, and viewing keeps it complete", async () => {
     const lessonId = seeded.lessons[0].id;
     await getLessonPage(decisionsFor(seeded), lessonId);
-    completeLesson(seeded.user.id, lessonId);
+    completeLesson(seeded.user.id, lessonId, new Date());
     const page = await getLessonPage(decisionsFor(seeded), lessonId);
     expect(page?.view === "full" && page.lessonStatus).toBe(
       LessonProgressStatus.Completed
